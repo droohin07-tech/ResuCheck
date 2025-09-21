@@ -1,25 +1,26 @@
-import re
-import unicodedata
+import pdfplumber
+import docx2txt
+from io import BytesIO
 
-def clean_text(text: str) -> str:
+def extract_text(uploaded_file) -> str:
     """
-    Normalize text: lowercase, remove extra spaces, NFKD unicode normalize.
+    Extract text from an uploaded PDF or DOCX file (Streamlit uploaded file).
+    Returns plain text.
     """
-    if not text:
+    filename = getattr(uploaded_file, "name", "")
+    extension = filename.split(".")[-1].lower()
+
+    if extension == "pdf":
+        text = ""
+        with pdfplumber.open(BytesIO(uploaded_file.read())) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() + "\n"
+        return text.strip()
+
+    elif extension == "docx":
+        # docx2txt accepts file-like object
+        text = docx2txt.process(uploaded_file)
+        return text.strip()
+
+    else:
         return ""
-    text = unicodedata.normalize("NFKD", text)
-    text = text.lower()
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
-
-def extract_email(text: str) -> str:
-    match = re.search(r'[\w.-]+@[\w.-]+', text)
-    return match.group(0) if match else ""
-
-def extract_name(text: str) -> str:
-    # naive approach: first line
-    lines = text.split("\n")
-    for line in lines:
-        if line.strip():
-            return line.strip()
-    return ""

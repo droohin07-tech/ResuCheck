@@ -1,27 +1,26 @@
-from backend.utilities import clean_text
-import pdfplumber
-import docx2txt
+from typing import Dict
+from backend.utilities import extract_text
 
-def get_text(file=None, typed_text=None) -> str:
-    """
-    Get JD text from uploaded file or typed input
-    """
-    text = ""
-    if typed_text:
-        text = typed_text
-    elif file:
-        if file.name.endswith(".pdf"):
-            with pdfplumber.open(file) as pdf:
-                text = "\n".join([page.extract_text() or "" for page in pdf.pages])
-        elif file.name.endswith(".docx"):
-            text = docx2txt.process(file)
-    return text
+class JDParser:
+    def parse_file(self, file) -> Dict:
+        """
+        Parse JD from uploaded PDF/DOCX file
+        """
+        raw_text = extract_text(file)
+        normalized_text = " ".join(raw_text.lower().split())
+        return {
+            "file_name": getattr(file, "name", "JD_file"),
+            "raw_text": raw_text,
+            "normalized_text": normalized_text
+        }
 
-def parse_jd(file=None, typed_text=None) -> dict:
-    raw_text = get_text(file, typed_text)
-    normalized_text = clean_text(raw_text)
-    return {
-        "file_name": file.name if file else "typed_jd",
-        "text_content": raw_text,
-        "normalized_text": normalized_text
-    }
+    def parse_text(self, text: str) -> Dict:
+        """
+        Parse JD from typed text
+        """
+        normalized_text = " ".join(text.lower().split())
+        return {
+            "file_name": "typed_JD",
+            "raw_text": text,
+            "normalized_text": normalized_text
+        }
