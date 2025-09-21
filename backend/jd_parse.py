@@ -1,45 +1,27 @@
-import os
-from backend.database import get_connection
 from backend.utilities import clean_text
-import docx2txt
 import pdfplumber
+import docx2txt
 
-class JDParser:
+def get_text(file=None, typed_text=None) -> str:
+    """
+    Get JD text from uploaded file or typed input
+    """
+    text = ""
+    if typed_text:
+        text = typed_text
+    elif file:
+        if file.name.endswith(".pdf"):
+            with pdfplumber.open(file) as pdf:
+                text = "\n".join([page.extract_text() or "" for page in pdf.pages])
+        elif file.name.endswith(".docx"):
+            text = docx2txt.process(file)
+    return text
 
-    SUPPORTED_EXTENSIONS = [".pdf", ".docx"]
-
-    def extract_text(self, file_path: str) -> str:
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext == ".pdf":
-            text = ""
-            with pdfplumber.open(file_path) as pdf:
-                for page in pdf.pages:
-                    text += page.extract_text() + "\n"
-            return text
-        elif ext == ".docx":
-            return docx2txt.process(file_path)
-        else:
-            return ""
-
-    def parse_jd(self, text: str = None, file_path: str = None) -> int:
-        if file_path:
-            raw_text = self.extract_text(file_path)
-        elif text:
-            raw_text = text
-        else:
-            return None
-
-        normalized_text = clean_text(raw_text)
-
-        # Save to DB
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO job_descriptions (file_name, text_content, normalized_text)
-            VALUES (?, ?, ?)
-        """, (os.path.basename(file_path) if file_path else "typed_jd", raw_text, normalized_text))
-        jd_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        return jd_id
+def parse_jd(file=None, typed_text=None) -> dict:
+    raw_text = get_text(file, typed_text)
+    normalized_text = clean_text(raw_text)
+    return {
+        "file_name": file.name if file else "typed_jd",
+        "text_content": raw_text,
+        "normalized_text": normalized_text
+    }

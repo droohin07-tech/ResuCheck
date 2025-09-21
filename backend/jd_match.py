@@ -1,46 +1,34 @@
-from backend.database import get_connection
-from backend.utilities import clean_text, str_to_list, list_to_str
+from backend.utilities import clean_text
 
-class JDMatcher:
+def hard_match(resume, jd) -> float:
+    """
+    Simple keyword overlap score
+    """
+    resume_words = set(resume["normalized_text"].split())
+    jd_words = set(jd["normalized_text"].split())
+    if not jd_words:
+        return 0.0
+    return len(resume_words & jd_words) / len(jd_words)
 
-    def compute_hard_score(self, resume_text: str, jd_text: str) -> float:
-        """
-        Simple keyword match percentage
-        """
-        resume_words = set(clean_text(resume_text).split())
-        jd_words = set(clean_text(jd_text).split())
-        matches = resume_words.intersection(jd_words)
-        return len(matches) / len(jd_words) if jd_words else 0.0
+def soft_match(resume, jd) -> float:
+    """
+    Placeholder semantic match
+    """
+    # For demo: simple text similarity approximation
+    resume_len = len(resume["normalized_text"].split())
+    jd_len = len(jd["normalized_text"].split())
+    if resume_len + jd_len == 0:
+        return 0
+    return min(resume_len, jd_len) / max(resume_len, jd_len)
 
-    def compute_soft_score(self, resume_text: str, jd_text: str) -> float:
-        """
-        Dummy semantic match (placeholder for embeddings/LLM)
-        """
-        # For now, just a random placeholder
-        import random
-        return round(random.uniform(0.6, 0.95), 2)
-
-    def match_resume_to_jd(self, resume_id: int, jd_id: int):
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        # Fetch resume and JD
-        cursor.execute("SELECT normalized_text FROM resumes WHERE id = ?", (resume_id,))
-        resume_text = cursor.fetchone()[0]
-
-        cursor.execute("SELECT normalized_text FROM job_descriptions WHERE id = ?", (jd_id,))
-        jd_text = cursor.fetchone()[0]
-
-        hard_score = self.compute_hard_score(resume_text, jd_text)
-        soft_score = self.compute_soft_score(resume_text, jd_text)
-        verdict = "Suitable" if hard_score > 0.5 and soft_score > 0.7 else "Review"
-
-        # Store match
-        cursor.execute("""
-            INSERT INTO matches (resume_id, jd_id, hard_score, soft_score, verdict)
-            VALUES (?, ?, ?, ?, ?)
-        """, (resume_id, jd_id, hard_score, soft_score, verdict))
-        conn.commit()
-        conn.close()
-
-        return {"hard_score": hard_score, "soft_score": soft_score, "verdict": verdict}
+def run_match(resume, jd) -> dict:
+    h_score = hard_match(resume, jd)
+    s_score = soft_match(resume, jd)
+    verdict = "Strong Fit" if h_score + s_score > 1.5 else "Weak Fit"
+    return {
+        "resume": resume["file_name"],
+        "jd": jd["file_name"],
+        "hard_score": round(h_score, 2),
+        "soft_score": round(s_score, 2),
+        "verdict": verdict
+    }

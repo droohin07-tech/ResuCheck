@@ -3,18 +3,23 @@ import unicodedata
 
 def clean_text(text: str) -> str:
     """
-    Normalize text for semantic matching:
-    - lowercase
-    - remove accents
-    - remove extra spaces
+    Normalize text: lowercase, remove extra spaces, NFKD unicode normalize.
     """
+    if not text:
+        return ""
     text = unicodedata.normalize("NFKD", text)
-    text = text.encode("ascii", "ignore").decode("utf-8")
+    text = text.lower()
     text = re.sub(r'\s+', ' ', text)
-    return text.lower().strip()
+    return text.strip()
 
-def list_to_str(lst: list) -> str:
-    return ", ".join(lst)
+def extract_email(text: str) -> str:
+    match = re.search(r'[\w.-]+@[\w.-]+', text)
+    return match.group(0) if match else ""
 
-def str_to_list(s: str) -> list:
-    return [x.strip() for x in s.split(",") if x.strip()]
+def extract_name(text: str) -> str:
+    # naive approach: first line
+    lines = text.split("\n")
+    for line in lines:
+        if line.strip():
+            return line.strip()
+    return ""
