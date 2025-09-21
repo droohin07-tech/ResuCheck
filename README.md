@@ -41,3 +41,14 @@ This project uses **Python, Streamlit, and lightweight parsing modules**. It run
 
 ## Project Structure
 
+ResuCheck/
+│
+├── app.py # Main Streamlit app
+├── backend/
+│ ├── init.py
+│ ├── resume_parse.py # Resume parsing
+│ ├── jd_parse.py # Job description parsing
+│ ├── jd_match.py # Hard + soft match logic
+│ └── utilities.py # Text extraction & helpers
+├── requirements.txt # Python dependencies
+├── README.md
