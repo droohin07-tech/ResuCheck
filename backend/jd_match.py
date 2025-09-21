@@ -1,65 +1,46 @@
-from typing import Dict, List
-from sentence_transformers import SentenceTransformer, util
+from backend.database import get_connection
+from backend.utilities import clean_text, str_to_list, list_to_str
 
 class JDMatcher:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+
+    def compute_hard_score(self, resume_text: str, jd_text: str) -> float:
         """
-        Initialize the semantic similarity model
+        Simple keyword match percentage
         """
-        self.model = SentenceTransformer(model_name)
+        resume_words = set(clean_text(resume_text).split())
+        jd_words = set(clean_text(jd_text).split())
+        matches = resume_words.intersection(jd_words)
+        return len(matches) / len(jd_words) if jd_words else 0.0
 
-    def match(self, resume: Dict, jd: Dict) -> Dict:
+    def compute_soft_score(self, resume_text: str, jd_text: str) -> float:
         """
-        Compare a parsed resume with a parsed job description
-        Returns relevance score, missing elements, and verdict
+        Dummy semantic match (placeholder for embeddings/LLM)
         """
-        resume_text = resume["normalized_text"]
-        jd_text = jd["normalized_text"]
+        # For now, just a random placeholder
+        import random
+        return round(random.uniform(0.6, 0.95), 2)
 
-        # ----- Soft match (semantic similarity) -----
-        embeddings = self.model.encode([resume_text, jd_text], convert_to_tensor=True)
-        similarity = util.pytorch_cos_sim(embeddings[0], embeddings[1]).item()
-        semantic_score = round(similarity * 100, 2)  # scale 0-100
+    def match_resume_to_jd(self, resume_id: int, jd_id: int):
+        conn = get_connection()
+        cursor = conn.cursor()
 
-        # ----- Hard match (skills + education) -----
-        jd_skills = set(jd["structured"].get("skills", []))
-        resume_text_lower = resume_text.lower()
+        # Fetch resume and JD
+        cursor.execute("SELECT normalized_text FROM resumes WHERE id = ?", (resume_id,))
+        resume_text = cursor.fetchone()[0]
 
-        present_skills = [s for s in jd_skills if s.lower() in resume_text_lower]
-        missing_skills = list(jd_skills - set(present_skills))
+        cursor.execute("SELECT normalized_text FROM job_descriptions WHERE id = ?", (jd_id,))
+        jd_text = cursor.fetchone()[0]
 
-        jd_education = jd["structured"].get("education", [])
-        missing_education = [e for e in jd_education if e.lower() not in resume_text_lower]
+        hard_score = self.compute_hard_score(resume_text, jd_text)
+        soft_score = self.compute_soft_score(resume_text, jd_text)
+        verdict = "Suitable" if hard_score > 0.5 and soft_score > 0.7 else "Review"
 
-        missing_elements = missing_skills + missing_education
+        # Store match
+        cursor.execute("""
+            INSERT INTO matches (resume_id, jd_id, hard_score, soft_score, verdict)
+            VALUES (?, ?, ?, ?, ?)
+        """, (resume_id, jd_id, hard_score, soft_score, verdict))
+        conn.commit()
+        conn.close()
 
-        # ----- Final score -----
-        hard_score = (len(present_skills) / len(jd_skills) * 100) if jd_skills else 0
-        final_score = round((0.7 * semantic_score) + (0.3 * hard_score), 2)
-
-        # ----- Verdict -----
-        if final_score >= 75:
-            verdict = "Suitable"
-        elif final_score >= 50:
-            verdict = "Needs Review"
-        else:
-            verdict = "Not Suitable"
-
-        return {
-            "file_name": resume["file_name"],
-            "semantic_score": semantic_score,
-            "hard_score": hard_score,
-            "final_score": final_score,
-            "missing_elements": missing_elements,
-            "verdict": verdict
-        }
-
-    def batch_match(self, resumes: List[Dict], jd: Dict) -> List[Dict]:
-        """
-        Run matching for multiple resumes against one JD
-        """
-        results = []
-        for r in resumes:
-            result = self.match(r, jd)
-            results.append(result)
-        return results
+        return {"hard_score": hard_score, "soft_score": soft_score, "verdict": verdict}

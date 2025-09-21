@@ -1,55 +1,45 @@
-import pdfplumber
+import os
+from backend.database import get_connection
+from backend.utilities import clean_text
 import docx2txt
-from typing import Dict
-from .utilities import clean_text, extract_education, match_skills
+import pdfplumber
 
 class JDParser:
-    def parse(self, jd_text: str = None, jd_file=None, skill_list=None) -> Dict:
 
-        if jd_file:
-            file_name = getattr(jd_file, "name", "")
-            extension = file_name.lower().split(".")[-1]
-            if extension == "pdf":
-                text = self.pdf(jd_file)
-            elif extension == "docx":
-                text = self.docx(jd_file)
-            else:
-                raise ValueError(f"Unsupported file type: {extension}")
-        elif jd_text:
-            text = jd_text
-        else:
+    SUPPORTED_EXTENSIONS = [".pdf", ".docx"]
+
+    def extract_text(self, file_path: str) -> str:
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
             text = ""
-
-        normalized_text = clean_text(text)
-
-        structured = {
-            "skills": match_skills(text, skill_list) if skill_list else [],
-            "education": extract_education(text)
-        }
-
-        return {
-            "raw_text": text,
-            "normalized_text": normalized_text,
-            "structured": structured
-        }
-
-    # ---------------- Private helpers ---------------- #
-    def pdf(self, file) -> str:
-        text = ""
-        try:
-            with pdfplumber.open(file) as pdf:
+            with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-        except Exception as e:
-            print(f"Error reading PDF: {e}")
-        return text
+                    text += page.extract_text() + "\n"
+            return text
+        elif ext == ".docx":
+            return docx2txt.process(file_path)
+        else:
+            return ""
 
-    def docx(self, file) -> str:
-        try:
-            text = docx2txt.process(file)
-        except Exception as e:
-            print(f"Error reading DOCX: {e}")
-            text = ""
-        return text
+    def parse_jd(self, text: str = None, file_path: str = None) -> int:
+        if file_path:
+            raw_text = self.extract_text(file_path)
+        elif text:
+            raw_text = text
+        else:
+            return None
+
+        normalized_text = clean_text(raw_text)
+
+        # Save to DB
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO job_descriptions (file_name, text_content, normalized_text)
+            VALUES (?, ?, ?)
+        """, (os.path.basename(file_path) if file_path else "typed_jd", raw_text, normalized_text))
+        jd_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        return jd_id
