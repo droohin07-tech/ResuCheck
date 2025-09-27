@@ -52,3 +52,4 @@ ResuCheck/
 │ └── utilities.py # Text extraction & helpers
 ├── requirements.txt # Python dependencies
 ├── README.md
+
